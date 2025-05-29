@@ -13,27 +13,70 @@ env:
 
 jobs:
     unit-testing:
-        name: Unit Testing
-        runs-on: ubuntu-latest
-        steps:
+      name: Unit Testing
+      runs-on: ubuntu-latest
+      steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Setup NodeJS Version
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Cache Dependencies
+        uses: actions/cache@v4.2.3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+      - name: Install Dependencies
+        run: npm install
+      - name: Unit Testing
+        run: npm test
+      - name: Archive Test Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mocha-Test-Result
+          path: test-results.xml
+    code-coverage:
+      runs-on: ubuntu-latest
+      steps:
         - name: Checkout Repository
           uses: actions/checkout@v4
-        - name: Setup NodeJS Version
+        - name: Setup NodeJS 18
           uses: actions/setup-node@v4
           with:
-            node-version: 20
+              node-version: 18
         - name: Cache Dependencies
           uses: actions/cache@v4.2.3
           with:
             path: ~/.npm
             key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
-        - name: Install Dependencies
+        - name: Install Depnedencies
           run: npm install
-        - name: Unit Testing
-          run: npm test
-        - name: Archive Test Result
+        - name: Check Coverage
+          continue-on-error: true
+          run: npm run coverage
+        - name: Upload Code Coverage Reports
           uses: actions/upload-artifact@v4
           with:
-            name: Mocha-Test-Result
-            path: test-results.xml
-            
+            name: Code-Coverage-Result
+            path: coverage
+            retention-days: 5
+    docker:
+      name: Dockerize
+      runs-on: ubuntu-latest
+      needs: [unit-testing, code-coverage]
+      steps:
+        - name: Checkout Repository
+          uses: actions/checkout@v4
+        - name: Login to DockerHub
+          uses: docker/login-action@v3.4.0
+          with:
+            registry: ghcr.io
+            username: ${{ github.repository_owner }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+        - name: Build Image
+          uses: docker/build-push-action@v6.18.0
+          with:
+            push: true
+            tags: ghcr.io/${{ github.repository_owner }}/solar-system:${{ github.sha }}
+
